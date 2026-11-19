@@ -26,8 +26,22 @@ function grade_(p) {
   return p >= 90 ? 'A+' : p >= 80 ? 'A' : p >= 70 ? 'B' : p >= 60 ? 'C' : p >= 50 ? 'D' : 'F';
 }
 
+// Works both when the script is opened from a Sheet (Extensions → Apps Script)
+// and as a standalone project: then it creates a sheet "K-Map Quiz Marks" in your Drive.
+function ss_() {
+  let ss = null;
+  try { ss = SpreadsheetApp.getActiveSpreadsheet(); } catch (e) {}
+  if (ss) return ss;
+  const props = PropertiesService.getScriptProperties();
+  const id = props.getProperty('SHEET_ID');
+  if (id) return SpreadsheetApp.openById(id);
+  ss = SpreadsheetApp.create('K-Map Quiz Marks');
+  props.setProperty('SHEET_ID', ss.getId());
+  return ss;
+}
+
 function sheet_() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss = ss_();
   let sh = ss.getSheetByName(SHEET_NAME);
   if (!sh) sh = ss.insertSheet(SHEET_NAME);
   if (sh.getLastRow() === 0) {
@@ -44,7 +58,12 @@ function json_(o) {
 }
 
 function doGet() {
-  return json_({ ok: true, msg: 'K-Map marks endpoint is running.' });
+  try {
+    sheet_();
+    return json_({ ok: true, msg: 'K-Map marks endpoint is running.', sheet: ss_().getUrl() });
+  } catch (err) {
+    return json_({ ok: false, error: String(err) });
+  }
 }
 
 function doPost(e) {

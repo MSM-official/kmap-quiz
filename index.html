@@ -485,7 +485,7 @@ function finish(){
     $('endSave').innerHTML=`<div class="note info">Saving your marks…</div>`;
     saveProgress(true).then(ok=>{
       $('endSave').innerHTML=ok?`<div class="note ok">✓ Your marks are saved to your teacher's marks sheet.</div>`
-        :`<div class="note no">Your marks could not be saved automatically. Press <b>Copy result code</b> and send it to your teacher.<div class="codebox">${code}</div></div>`;
+        :`<div class="note no">Your marks could not be saved automatically. Press <b>Copy result code</b> and send it to your teacher.<div class="codebox">${code}</div><div style="font-size:.8rem;opacity:.8">Reason: ${lastErr||'unknown'}</div></div>`;
     });
   }
   show('scrEnd');
@@ -494,7 +494,7 @@ function finish(){
 /* ---------- saving to Google Sheet ---------- */
 // After deploying apps-script/Code.gs as a Web App, paste its URL here:
 const SHEET_URL='https://script.google.com/macros/s/AKfycbzIVMV5iqljileZvsFzuovzBB270D2d5y4tl-yib08Zz8fMfm5fwA8xb3-LGUmAkGVKbQ/exec';
-let practice=false,saved=null,sid=null,startedAt=null,saveChain=Promise.resolve(),practiceNext=false;
+let lastErr='',practice=false,saved=null,sid=null,startedAt=null,saveChain=Promise.resolve(),practiceNext=false;
 const NQ=LEVELS.reduce((s,l)=>s+l.qs.length,0);
 const flat=(a,b)=>LEVELS.slice(0,a).reduce((s,l)=>s+l.qs.length,0)+b;
 const unflat=k=>{let a=0;while(k>=LEVELS[a].qs.length){k-=LEVELS[a].qs.length;a++}return[a,k]};
@@ -510,14 +510,18 @@ function setPill(state){const p=$('saveState');p.style.display='';
   else{p.className='pill';p.textContent='Saving…'}}
 function hash(s){let h=5381;for(let i=0;i<s.length;i++)h=((h<<5)+h+s.charCodeAt(i))>>>0;return h.toString(36)}
 async function postSheet(payload){
-  if(!sheetReady())return false;
-  const p=JSON.stringify(payload);
+  if(!sheetReady())return{ok:false,error:'Sheet link not set'};
+  const p=JSON.stringify(payload);let last='Could not reach the sheet (check internet)';
   for(let attempt=0;attempt<2;attempt++){
     try{const r=await fetch(SHEET_URL,{method:'POST',body:JSON.stringify({p,s:hash('eed-kmap|'+p)})});
-      const j=await r.json();if(j&&j.ok)return true;if(j&&j.error)return false}catch(e){}
+      const txt=await r.text();let j=null;try{j=JSON.parse(txt)}catch(e){}
+      if(j&&j.ok)return{ok:true};
+      if(j&&j.error)return{ok:false,error:'Sheet script error: '+j.error};
+      last=r.ok?'The sheet link did not answer as expected (is access set to "Anyone"?)':'Sheet link answered '+r.status;
+    }catch(e){last='Could not reach the sheet: '+(e&&e.message||e)}
     await new Promise(r=>setTimeout(r,1000+Math.random()*1000));
   }
-  return false;
+  return{ok:false,error:last};
 }
 function saveProgress(finished){
   if(practice)return Promise.resolve(false);
@@ -525,7 +529,7 @@ function saveProgress(finished){
   lsSet({sid,name,q,finished:!!finished,startedAt});
   saved={sid,name,q,finished:!!finished,startedAt};
   setPill('saving');
-  saveChain=saveChain.then(async()=>{const ok=await postSheet({sid,name,q,finished:!!finished,src:'live',started:startedAt,t:Date.now()});setPill(ok?'ok':'no');return ok});
+  saveChain=saveChain.then(async()=>{const res=await postSheet({sid,name,q,finished:!!finished,src:'live',started:startedAt,t:Date.now()});setPill(res.ok?'ok':'no');if(!res.ok)$('saveState').title=res.error;lastErr=res.error;return res.ok});
   return saveChain;
 }
 function makeCode(){
@@ -569,13 +573,13 @@ function openTeacher(){
   $('teacherNote').innerHTML=sheetReady()?'Codes you add here are sent to your Google Sheet.':'<b>Setup not finished:</b> paste your Apps Script Web App URL into <code>SHEET_URL</code> in index.html first.';
 }
 async function importCodes(){
-  const lines=$('inCodes').value.split(/\s+/).filter(Boolean);let ok=0,bad=0;
+  const lines=$('inCodes').value.split(/\s+/).filter(Boolean);let ok=0;const errs=[];
   $('impMsg').textContent='Sending…';
-  for(const c of lines){const r=readCode(c);if(!r){bad++;continue}
+  for(const c of lines){const r=readCode(c);if(!r){errs.push('Code not valid (check it was copied completely)');continue}
     const q=r.o.q.map(x=>typeof x==='number'?Math.max(-1,Math.min(QMAX,x)):-1);
-    const done=await postSheet({sid:r.o.sid||('code-'+r.sig),name:String(r.o.n||'').slice(0,80),q,finished:q.every(x=>x>=0),src:'code',t:r.o.t||Date.now()});
-    done?ok++:bad++}
-  $('impMsg').textContent=`${ok} added to the sheet${bad?`, ${bad} invalid or failed`:''}.`;if(ok)$('inCodes').value='';
+    const res=await postSheet({sid:r.o.sid||('code-'+r.sig),name:String(r.o.n||'').slice(0,80),q,finished:q.every(x=>x>=0),src:'code',t:r.o.t||Date.now()});
+    res.ok?ok++:errs.push(res.error)}
+  $('impMsg').textContent=`${ok} added to the sheet.`+(errs.length?` ${errs.length} failed: ${[...new Set(errs)].join('; ')}`:'');if(ok&&!errs.length)$('inCodes').value='';
 }
 
 /* ---------- pen ---------- */
