@@ -38,7 +38,19 @@ input[type=text]{font:inherit;padding:10px 12px;border:1px solid var(--line);bor
 .lv .s{font-size:.78rem;color:var(--muted)}
 .lv .dots{display:flex;gap:4px;margin-top:6px}
 .lv .dots i{width:16px;height:6px;border-radius:3px;background:#e3e6ef}
-.lv .dots i.full{background:var(--good)}.lv .dots i.part{background:var(--warn)}.lv .dots i.zero{background:var(--bad)}.lv .dots i.now{background:var(--accent)}
+.lv .dots i.done{background:#64748b}.lv .dots i.skip{background:repeating-linear-gradient(45deg,#cbd2e1 0 3px,#eef0f6 3px 6px)}.lv .dots i.now{background:var(--accent)}
+.progress{background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 14px;margin:4px 0 10px}
+.progress .top{display:flex;justify-content:space-between;font-size:.9rem;margin-bottom:6px;gap:8px;flex-wrap:wrap}
+.progress .top b{font-size:1rem}
+.bar{height:12px;background:#e8ebf3;border-radius:999px;overflow:hidden;display:flex}
+.bar span{display:block;height:100%;transition:width .4s}
+.bar .b-done{background:var(--accent)}.bar .b-skip{background:#b8bfd0}
+.legend{display:flex;gap:12px;font-size:.78rem;color:var(--muted);margin-top:6px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:4px;vertical-align:-1px}
+button.warn{background:#fff7e6;border-color:#f3c77a;color:#7c4a03}
+button.danger{background:#dc2626;border-color:#dc2626;color:#fff}
+.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:#1b2033;color:#fff;padding:10px 16px;border-radius:999px;font-size:.92rem;opacity:0;transition:opacity .3s;pointer-events:none;z-index:9}
+.toast.on{opacity:.95}
 .lv.cur{border-color:var(--accent);box-shadow:0 0 0 2px #dfe6ff}
 .lv.lock{opacity:.5}
 
@@ -162,6 +174,7 @@ textarea{font:inherit;font-size:.85rem;width:100%;min-height:80px;border:1px sol
 
 <!-- QUIZ -->
 <div class="screen" id="scrQuiz">
+  <div class="progress" id="progress"></div>
   <div class="track" id="track"></div>
   <div class="grid2">
   <section class="card">
@@ -187,14 +200,15 @@ textarea{font:inherit;font-size:.85rem;width:100%;min-height:80px;border:1px sol
     <h2>Your equation</h2>
     <div class="eq"><b>F =</b><input type="text" id="inEq" autocomplete="off" autocapitalize="characters" spellcheck="false"></div>
     <div class="row" style="margin-top:12px">
-      <button class="primary big" id="btnSubmit">Submit &amp; check</button>
+      <button class="primary big" id="btnSubmit">Submit answer</button>
+      <button class="warn big" id="btnSkip">Skip (0 marks)</button>
       <button class="primary big" id="btnNext" style="display:none">Next question →</button>
     </div>
     <div class="fb" id="fb"></div>
     <div class="help">
       <b>Group:</b> drag across cells. For wrap-around groups (corners, opposite edges), <i>tap</i> each cell then press <b>Add group</b>.<br>
       <b>Write:</b> <code>'</code> = NOT, <code>+</code> = OR, letters side by side = AND, e.g. <code>A'B + CD'</code>. POS: <code>(A + B')(C + D)</code>.<br>
-      You get <b>one submission</b> per question.
+      You get <b>one submission</b> per question. Marks are shown at the end. A skipped question gets <b>0 marks</b>.
     </div>
   </section>
   </div>
@@ -204,12 +218,14 @@ textarea{font:inherit;font-size:.85rem;width:100%;min-height:80px;border:1px sol
 <div class="screen" id="scrEnd">
   <div class="card start" style="text-align:center">
     <h2 id="endName"></h2>
-    <div class="big-score" id="endScore"></div>
-    <div class="grade" id="endGrade"></div>
-    <table class="res" id="endTable"></table>
     <div id="endSave"></div>
+    <div id="endMarks" style="display:none">
+      <div class="big-score" id="endScore"></div>
+      <div class="grade" id="endGrade"></div>
+      <table class="res" id="endTable"></table>
+    </div>
     <div class="row" style="justify-content:center">
-      <button class="primary" id="btnCopy">Copy result code</button>
+      <button class="primary" id="btnCopy" style="display:none">Copy result code</button>
       <button id="btnAgain">Practice again</button>
     </div>
     <pre id="resText"></pre>
@@ -363,12 +379,17 @@ function renderTrack(){
   const t=$('track');t.innerHTML='';
   LEVELS.forEach((lv,i)=>{
     const d=document.createElement('div');d.className='lv'+(i===li?' cur':'')+(i>li?' lock':'');
-    const dots=lv.qs.map((_,j)=>{const r=results.find(x=>x.li===i&&x.qi===j);if(r)return`<i class="${r.marks===QMAX?'full':r.marks===0?'zero':'part'}"></i>`;return`<i class="${i===li&&j===qi?'now':''}"></i>`}).join('');
+    const dots=lv.qs.map((_,j)=>{const r=results.find(x=>x.li===i&&x.qi===j);if(r)return`<i class="${r.skipped?'skip':'done'}"></i>`;return`<i class="${i===li&&j===qi?'now':''}"></i>`}).join('');
     d.innerHTML=`<div class="t">${i+1}. ${lv.name}</div><div class="s">${lv.desc}</div><div class="dots">${dots}</div>`;t.appendChild(d);
   });
-  const got=results.reduce((s,r)=>s+r.marks,0);
-  $('score').style.display='';$('score').textContent=`Marks: ${got} / ${TOTAL}`;
+  const nq=LEVELS.reduce((s,l)=>s+l.qs.length,0),done=results.filter(r=>!r.skipped).length,sk=results.filter(r=>r.skipped).length,cur=Math.min(results.length+1,nq);
+  const pct=Math.round(results.length/nq*100);
+  $('progress').innerHTML=`<div class="top"><b>Question ${cur} of ${nq}</b><span>Level ${li+1}: ${LEVELS[li].name}</span><span>${pct}% complete</span></div>
+    <div class="bar"><span class="b-done" style="width:${done/nq*100}%"></span><span class="b-skip" style="width:${sk/nq*100}%"></span></div>
+    <div class="legend"><span><i style="background:var(--accent)"></i>Answered ${done}</span><span><i style="background:#b8bfd0"></i>Skipped ${sk}</span><span><i style="background:#e8ebf3"></i>Left ${nq-results.length}</span></div>`;
+  $('score').style.display='none';
 }
+function toast(msg){const t=$('toast');t.textContent=msg;t.classList.add('on');clearTimeout(toast._t);toast._t=setTimeout(()=>t.classList.remove('on'),2200)}
 
 /* ---------- interaction ---------- */
 let drag=null;
@@ -414,9 +435,27 @@ function parseExpr(str){
 function ev(e,m){switch(e.op){case'v':return bit(m,e.v)===1;case'k':return e.v;case'not':return!ev(e.a,m);case'and':return e.a.every(x=>ev(x,m));case'or':return e.a.some(x=>ev(x,m))}}
 
 /* ---------- auto-marking ---------- */
+let confirmT=null;
+function armButton(id,label,armedLabel,cls){
+  const b=$(id);if(b.dataset.armed){return true}
+  resetArms();b.dataset.armed='1';b.dataset.label=label;b.textContent=armedLabel;b.classList.add(cls);
+  confirmT=setTimeout(resetArms,5000);return false;
+}
+function resetArms(){clearTimeout(confirmT);['btnSubmit','btnSkip'].forEach(id=>{const b=$(id);if(b.dataset.armed){b.textContent=b.dataset.label;delete b.dataset.armed;b.classList.remove('danger');if(id==='btnSubmit')b.classList.add('primary')}})}
+function skip(){
+  if(submitted)return;
+  if(!armButton('btnSkip','Skip (0 marks)','Yes, skip with 0 marks','danger')){
+    showFb('bad','⚠ <b>Skipping gives 0 marks</b> for this question, and you cannot come back to it. Tap <b>Yes, skip with 0 marks</b> to confirm.');return}
+  resetArms();submitted=true;
+  results.push({li,qi,marks:0,skipped:true});saveProgress(false);
+  toast('Question skipped: 0 marks');next();
+}
 function submit(){
   if(submitted)return;
-  if(!groups.length&&!$('inEq').value.trim()){showFb('bad','Draw your groups and write the equation before submitting.');return}
+  if(!groups.length&&!$('inEq').value.trim()){showFb('bad','Draw your groups and write the equation first, or use <b>Skip</b>.');return}
+  if(!$('inEq').value.trim()){showFb('bad','Write the equation before submitting.');return}
+  if(!armButton('btnSubmit','Submit answer','Confirm submit?','danger')){showFb('info','You get one submission per question. Tap <b>Confirm submit?</b> to lock your answer.');return}
+  resetArms();
   pending.clear();
   const want=form==='sop'?'1':'0', rows=[];
   const T=[];for(let m=0;m<L.size;m++)if(vals[m]===tv())T.push(m);
@@ -442,13 +481,8 @@ function submit(){
   const got=rows.reduce((s,r)=>s+r[1],0);
   results.push({li,qi,marks:got});
   saveProgress(false);
-  submitted=true;showAns=true;
-  const tbl=rows.map(r=>`<tr><td>${r[0]}</td><td>${r[1]} / ${r[2]}</td></tr>`).join('');
-  showFb(got===QMAX?'good':got>=5?'info':'bad',`<b>${got===QMAX?'Excellent! Full marks.':'Marks for this question'}</b><table class="marks">${tbl}<tr class="tot"><td><b>Total</b></td><td>${got} / ${QMAX}</td></tr></table><div style="margin-top:8px">Answer: F = <code>${exprStr(answer.terms)}</code></div>`);
-  $('inEq').disabled=true;$('btnSubmit').style.display='none';$('btnNext').style.display='';
-  const last=li===LEVELS.length-1&&qi===LEVELS[li].qs.length-1;
-  $('btnNext').textContent=last?'See my result →':qi===LEVELS[li].qs.length-1?`Next level: ${LEVELS[li+1].name} →`:'Next question →';
-  render();renderTrack();
+  submitted=true;marks.bad.clear();marks.uncov.clear();
+  toast('✓ Answer submitted');next();
 }
 
 /* ---------- flow ---------- */
@@ -457,7 +491,7 @@ function loadQuestion(){
   makeProblem(spec);
   groups=[];pending.clear();marks.bad.clear();marks.uncov.clear();showAns=false;submitted=false;strokes=[];
   $('inEq').value='';$('inEq').disabled=false;$('inEq').placeholder=form==='sop'?"e.g. A'B + C":"e.g. (A + B')(C + D)";
-  $('btnSubmit').style.display='';$('btnNext').style.display='none';hideFb();
+  $('btnSubmit').style.display='';$('btnSkip').style.display='';$('btnNext').style.display='none';resetArms();hideFb();
   $('qtitle').textContent=`Level ${li+1}: ${LEVELS[li].name} · Question ${qi+1} of ${LEVELS[li].qs.length}`+(form==='pos'?' · POS':'');
   const vs=VARS.slice(0,n).split('').join(',');
   const ms=[],zs=[];for(let m=0;m<L.size;m++)(vals[m]?ms:zs).push(m);
@@ -472,20 +506,28 @@ function next(){
 function show(id){document.querySelectorAll('.screen').forEach(s=>s.classList.toggle('on',s.id===id))}
 function gradeOf(p){return p>=90?'A+':p>=80?'A':p>=70?'B':p>=60?'C':p>=50?'D':'F'}
 function finish(){
-  const got=results.reduce((s,r)=>s+r.marks,0),pct=Math.round(got/TOTAL*100);
+  const got=results.reduce((s,r)=>s+r.marks,0),pct=Math.round(got/TOTAL*100),sk=results.filter(r=>r.skipped).length;
   $('endName').textContent=name;$('endScore').textContent=`${got} / ${TOTAL}`;$('endGrade').textContent=`${pct}% · Grade ${gradeOf(pct)}`;
   const lines=LEVELS.map((lv,i)=>{const s=results.filter(r=>r.li===i).reduce((a,r)=>a+r.marks,0);return[`${i+1}. ${lv.name}`,`${s} / ${lv.qs.length*QMAX}`]});
-  $('endTable').innerHTML=lines.map(l=>`<tr><td style="text-align:left">${l[0]}</td><td>${l[1]}</td></tr>`).join('');
-  $('resText').textContent=`K-Map Quiz: ${name}\nTotal: ${got}/${TOTAL} (${pct}%, Grade ${gradeOf(pct)})\n`+lines.map(l=>`${l[0]}: ${l[1]}`).join('\n');
-  $('score').textContent=`Marks: ${got} / ${TOTAL}`;
+  $('endTable').innerHTML=lines.map(l=>`<tr><td style="text-align:left">${l[0]}</td><td>${l[1]}</td></tr>`).join('')+(sk?`<tr><td style="text-align:left;color:var(--muted)">Skipped questions</td><td>${sk}</td></tr>`:'');
   const code=makeCode();
-  $('resText').textContent=code;
-  if(practice){$('endSave').innerHTML=`<div class="note info">This was a practice round, so these marks were <b>not</b> sent to the marks sheet. Your first attempt is the one that counts.</div>`}
+  $('resText').textContent=code;$('resText').style.display='none';
+  $('endMarks').style.display='none';$('btnCopy').style.display='none';$('btnCopy').textContent='Copy result code';
+  const reveal=()=>{$('endMarks').style.display='';$('score').style.display='';$('score').textContent=`Marks: ${got} / ${TOTAL}`};
+  if(practice){$('endSave').innerHTML=`<div class="note info">Practice round: these marks were <b>not</b> sent to the marks sheet. Your first attempt is the one that counts.</div>`;reveal()}
   else{
-    $('endSave').innerHTML=`<div class="note info">Saving your marks…</div>`;
+    $('endSave').innerHTML=`<div class="note info">Saving your marks to your teacher's sheet…</div>`;
     saveProgress(true).then(ok=>{
-      $('endSave').innerHTML=ok?`<div class="note ok">✓ Your marks are saved to your teacher's marks sheet.</div>`
-        :`<div class="note no">Your marks could not be saved automatically. Press <b>Copy result code</b> and send it to your teacher.<div class="codebox">${code}</div><div style="font-size:.8rem;opacity:.8">Reason: ${lastErr||'unknown'}</div></div>`;
+      if(ok){$('endSave').innerHTML=`<div class="note ok">✓ Your marks are saved to your teacher's marks sheet.</div>`;reveal()}
+      else{
+        $('endSave').innerHTML=`<div class="note no">Your marks could not be saved automatically. Copy this <b>result code</b> and send it to your teacher. Your marks will show after you copy it.<div class="codebox">${code}</div><div style="font-size:.8rem;opacity:.8">Reason: ${lastErr||'unknown'}</div></div>`;
+        $('btnCopy').style.display='';
+        $('btnCopy').onclick=async()=>{
+          try{await navigator.clipboard.writeText(code);$('btnCopy').textContent='Copied ✓ Send it to your teacher'}
+          catch(e){$('btnCopy').textContent='Select the code above and copy it'}
+          reveal();
+        };
+      }
     });
   }
   show('scrEnd');
@@ -613,15 +655,15 @@ $('btnAdd').onclick=addGroup;
 $('btnCancel').onclick=()=>{pending.clear();paintPending()};
 $('btnClearG').onclick=()=>{groups=[];pending.clear();hideFb();render()};
 $('btnClearInk').onclick=()=>{strokes=[];redraw()};
-$('btnSubmit').onclick=submit;
+$('btnSubmit').onclick=submit;$('btnSkip').onclick=skip;
 $('btnNext').onclick=next;
 $('inEq').onkeydown=e=>{if(e.key==='Enter')submit()};
 $('btnAgain').onclick=()=>{practiceNext=true;show('scrStart');$('score').style.display='none';$('saveState').style.display='none';
   $('resumeBox').innerHTML='<div class="note info">Practice round: marks won\'t be sent again. Your first attempt is the one that counts.</div>';$('btnStart').textContent='Practice'};
-$('btnCopy').onclick=async()=>{const t=$('resText');t.style.display='block';
-  try{await navigator.clipboard.writeText(t.textContent);$('btnCopy').textContent='Copied ✓ Send it to your teacher'}catch(e){$('btnCopy').textContent='Select the code below to copy'}};
+
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.activeElement.tagName!=='INPUT'&&pending.size)addGroup()});
 buildPen();initLocal();
 </script>
+<div class="toast" id="toast"></div>
 </body>
 </html>
