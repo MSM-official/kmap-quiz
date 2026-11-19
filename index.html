@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>K-Map Interactive Session</title>
+<style>
+:root{--bg:#f6f7fb;--card:#fff;--ink:#1b2033;--muted:#6b7285;--line:#d6dae6;--accent:#2f5bea;--good:#15803d;--bad:#dc2626;--warn:#d97706;--cell:#fbfcff}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink)}
+header{padding:12px 18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;max-width:1100px;margin:0 auto}
+header h1{font-size:1.3rem;margin:0}
+.who{color:var(--muted);font-size:.92rem}
+.score{margin-left:auto;font-weight:700;font-size:1.05rem;background:#fff;border:1px solid var(--line);border-radius:999px;padding:6px 14px}
+.wrap{max-width:1100px;margin:0 auto;padding:0 14px 40px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px}
+.grid2{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:16px}
+@media (max-width:860px){.grid2{grid-template-columns:1fr}}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
+.lbl{font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.seg button{border:0;border-right:1px solid var(--line);border-radius:0}
+.seg button:last-child{border-right:0}
+.seg button.on{background:var(--accent);color:#fff}
+button{font:inherit;font-size:.92rem;padding:8px 13px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);cursor:pointer}
+button:hover{border-color:#aab2c8}
+button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+button.big{font-size:1.05rem;padding:11px 20px}
+button:disabled{opacity:.45;cursor:default}
+input[type=text]{font:inherit;padding:10px 12px;border:1px solid var(--line);border-radius:10px;width:100%;font-size:1.05rem}
+.swatch{width:26px;height:26px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px var(--line);padding:0}
+.swatch.on{box-shadow:0 0 0 3px var(--ink)}
+
+/* level track */
+.track{display:flex;gap:6px;margin:4px 0 14px;flex-wrap:wrap}
+.lv{flex:1;min-width:120px;border:1px solid var(--line);border-radius:12px;padding:8px 10px;background:#fff}
+.lv .t{font-weight:650;font-size:.92rem}
+.lv .s{font-size:.78rem;color:var(--muted)}
+.lv .dots{display:flex;gap:4px;margin-top:6px}
+.lv .dots i{width:16px;height:6px;border-radius:3px;background:#e3e6ef}
+.lv .dots i.full{background:var(--good)}.lv .dots i.part{background:var(--warn)}.lv .dots i.zero{background:var(--bad)}.lv .dots i.now{background:var(--accent)}
+.lv.cur{border-color:var(--accent);box-shadow:0 0 0 2px #dfe6ff}
+.lv.lock{opacity:.5}
+
+/* K-map */
+.qtitle{font-size:1.05rem;font-weight:650;margin:0 0 4px}
+.qsub{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.95rem;background:#f1f3f9;border-radius:10px;padding:8px 10px;margin-bottom:10px;word-break:break-word}
+#mapWrap{position:relative;margin:6px auto 4px;width:min(100%,540px);user-select:none;-webkit-user-select:none}
+.kouter{display:grid;grid-template-columns:auto 1fr;grid-template-rows:auto 1fr}
+.corner{position:relative;min-width:62px;min-height:44px;font-weight:600;font-size:.95rem}
+.corner .r{position:absolute;left:6px;bottom:4px;color:#b4286a}
+.corner .c{position:absolute;right:6px;top:4px;color:#1d6fb8}
+.corner:after{content:"";position:absolute;inset:0;background:linear-gradient(to top right,transparent calc(50% - 1px),var(--line) 50%,transparent calc(50% + 1px))}
+.colh,.rowh{display:grid;font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:600}
+.colh div{text-align:center;align-self:end;padding-bottom:4px;color:#1d6fb8}
+.rowh div{display:flex;align-items:center;justify-content:flex-end;padding-right:8px;color:#b4286a}
+.cells{position:relative;display:grid;border:2px solid var(--ink);border-radius:4px;touch-action:none;background:var(--cell)}
+.cell{position:relative;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:clamp(1.3rem,4.5vw,2rem);font-weight:650;cursor:pointer}
+.cell .mn{position:absolute;left:5px;top:3px;font-size:.62rem;font-weight:500;color:var(--muted)}
+.cell.v0 .val{color:#b8bdcc}
+.cell.pend{background:#e6edff;outline:3px dashed var(--accent);outline-offset:-5px}
+.cell.bad{background:#fde2e2}
+.cell.uncov{background:#fff1d6}
+svg.groups{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+canvas#ink{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;touch-action:none}
+body.pen canvas#ink{pointer-events:auto;cursor:crosshair}
+.hint{font-size:.88rem;color:var(--muted);text-align:center;min-height:1.3em;margin:6px 0}
+h2{font-size:1rem;margin:0 0 10px}
+.groups-list{display:flex;flex-direction:column;gap:6px;margin-bottom:12px;min-height:28px}
+.gitem{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:10px;padding:6px 8px}
+.gdot{width:14px;height:14px;border-radius:4px;flex:none}
+.gterm{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:1rem;font-weight:600;flex:1}
+.gitem button{padding:2px 9px}
+.empty{color:var(--muted);font-size:.9rem}
+.eq{display:flex;align-items:center;gap:8px}
+.eq b{white-space:nowrap;font-size:1.15rem;font-family:ui-monospace,Menlo,Consolas,monospace}
+.fb{margin-top:12px;border-radius:10px;padding:10px 12px;font-size:.95rem;line-height:1.5;display:none}
+.fb.show{display:block}
+.fb.good{background:#e5f6ea;color:#14532d;border:1px solid #b7e2c3}
+.fb.bad{background:#fdecec;color:#7f1d1d;border:1px solid #f3c2c2}
+.fb.info{background:#eef2ff;color:#1e2a6b;border:1px solid #cdd6fb}
+.fb code{font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:700}
+.marks{width:100%;border-collapse:collapse;margin-top:6px;font-size:.92rem}
+.marks td{padding:4px 2px;border-bottom:1px solid rgba(0,0,0,.07)}
+.marks td:last-child{text-align:right;font-weight:650;white-space:nowrap}
+.marks tr.tot td{border-bottom:0;font-size:1.05rem}
+.help{font-size:.85rem;color:var(--muted);line-height:1.5;margin-top:14px}
+.help code{background:#f1f3f9;border-radius:5px;padding:1px 5px}
+#penPanel{display:none}
+body.pen #penPanel{display:flex}
+/* screens */
+.screen{display:none}.screen.on{display:block}
+.start{max-width:620px;margin:20px auto}
+.start h2{font-size:1.35rem}
+.start ol{padding-left:20px;line-height:1.7}
+.big-score{font-size:3rem;font-weight:800;margin:6px 0}
+.grade{display:inline-block;font-size:1.4rem;font-weight:800;border-radius:12px;padding:4px 16px;background:#eef2ff;color:var(--accent)}
+.res td{padding:6px 4px;border-bottom:1px solid var(--line)}
+.res{width:100%;border-collapse:collapse;margin:12px 0}
+.res td:last-child{text-align:right;font-weight:650}
+pre#resText{white-space:pre-wrap;background:#f1f3f9;border-radius:10px;padding:10px;font-size:.85rem;display:none}
+.pill{font-size:.8rem;border-radius:999px;padding:4px 10px;background:#eef0f6;color:var(--muted)}
+.pill.ok{background:#e5f6ea;color:#14532d}.pill.no{background:#fff1d6;color:#7c4a03}
+.codebox{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.8rem;background:#f1f3f9;border-radius:10px;padding:10px;word-break:break-all;text-align:left;user-select:all;-webkit-user-select:all;margin:8px 0}
+.note{font-size:.9rem;border-radius:10px;padding:10px 12px;margin:10px 0;text-align:left}
+.note.ok{background:#e5f6ea;color:#14532d}.note.no{background:#fff7e6;color:#7c4a03}.note.info{background:#eef2ff;color:#1e2a6b}
+.tscroll{overflow:auto;border:1px solid var(--line);border-radius:12px;margin-top:10px}
+table.sheet{border-collapse:collapse;width:100%;font-size:.9rem;background:#fff}
+.sheet th,.sheet td{padding:7px 9px;border-bottom:1px solid var(--line);text-align:center;white-space:nowrap}
+.sheet th{background:#f1f3f9;position:sticky;top:0;cursor:pointer;font-size:.8rem;text-transform:uppercase;letter-spacing:.03em;color:#40465a}
+.sheet td:nth-child(2),.sheet th:nth-child(2),.sheet td:nth-child(3),.sheet th:nth-child(3){text-align:left}
+.sheet td.tot{font-weight:750}
+.sheet .st{font-size:.78rem;border-radius:999px;padding:2px 8px}
+.st.done{background:#e5f6ea;color:#14532d}.st.prog{background:#eef2ff;color:#1e2a6b}
+.sheet button{padding:2px 8px;font-size:.8rem}
+textarea{font:inherit;font-size:.85rem;width:100%;min-height:80px;border:1px solid var(--line);border-radius:10px;padding:8px;font-family:ui-monospace,Menlo,Consolas,monospace}
+.stats{display:flex;gap:10px;flex-wrap:wrap;margin:8px 0}
+.stat{background:#fff;border:1px solid var(--line);border-radius:12px;padding:8px 14px}
+.stat b{display:block;font-size:1.3rem}.stat span{font-size:.78rem;color:var(--muted)}
+</style>
+</head>
+<body class="group">
+<header>
+  <h1>K-Map Interactive Session</h1>
+  <span class="who" id="who"></span>
+  <span class="pill" id="saveState" style="display:none"></span>
+  <span class="score" id="score" style="display:none"></span>
+</header>
+
+<div class="wrap">
+<!-- START -->
+<div class="screen on" id="scrStart">
+  <div class="card start">
+    <h2>From Zero to Expert</h2>
+    <p style="color:var(--muted);margin-top:0">5 levels × 3 questions. Each question is worth <b>10 marks</b>. Total: <b>150</b>.</p>
+    <ol>
+      <li><b>Beginner:</b> 2-variable maps</li>
+      <li><b>Easy:</b> 3-variable maps, simple groups</li>
+      <li><b>Medium:</b> 3-variable maps, more groups</li>
+      <li><b>Hard:</b> 4-variable maps</li>
+      <li><b>Expert:</b> 4-variable maps with wrap-around and corners, plus a POS question</li>
+    </ol>
+    <p style="font-size:.9rem;color:var(--muted)">Marking per question: groups cover every 1 (2) · groups as large as possible (2) · no extra groups (1) · equation correct (3) · equation minimal (2).</p>
+    <div class="row" style="margin-top:12px">
+      <input type="text" id="inName" placeholder="Your name / roll number" style="flex:1;min-width:200px">
+      <button class="primary big" id="btnStart">Start</button>
+    </div>
+    <div id="resumeBox"></div>
+  </div>
+</div>
+
+<!-- TEACHER (open with #teacher at the end of the link) -->
+<div class="screen" id="scrTeacher">
+  <div class="card start">
+    <h2>Teacher: add result codes</h2>
+    <p class="help" id="teacherNote"></p>
+    <p class="help">All marks are in your Google Sheet. If a student's marks could not save (no internet), they get a result code at the end. Paste the codes here, one per line.</p>
+    <textarea id="inCodes" placeholder="KM1.xxxxx.yyyy"></textarea>
+    <div class="row" style="margin-top:8px"><button class="primary" id="btnImport">Send to sheet</button><span id="impMsg" class="help" style="margin:0"></span></div>
+  </div>
+</div>
+
+<!-- QUIZ -->
+<div class="screen" id="scrQuiz">
+  <div class="track" id="track"></div>
+  <div class="grid2">
+  <section class="card">
+    <p class="qtitle" id="qtitle"></p>
+    <div class="qsub" id="qsub"></div>
+    <div class="row">
+      <span class="lbl">Tool</span>
+      <div class="seg" id="segT"><button data-t="group" class="on">⬚ Make groups</button><button data-t="pen">✎ Pen</button></div>
+    </div>
+    <div class="row" id="penPanel"></div>
+    <div id="mapWrap"><div class="kouter" id="kouter"></div><canvas id="ink"></canvas></div>
+    <div class="hint" id="hint"></div>
+    <div class="row" style="justify-content:center">
+      <button class="primary" id="btnAdd" disabled>Add group</button>
+      <button id="btnCancel" disabled>Cancel selection</button>
+      <button id="btnClearG">Clear groups</button>
+      <button id="btnClearInk">Clear ink</button>
+    </div>
+  </section>
+  <section class="card">
+    <h2>Your groups</h2>
+    <div class="groups-list" id="glist"></div>
+    <h2>Your equation</h2>
+    <div class="eq"><b>F =</b><input type="text" id="inEq" autocomplete="off" autocapitalize="characters" spellcheck="false"></div>
+    <div class="row" style="margin-top:12px">
+      <button class="primary big" id="btnSubmit">Submit &amp; check</button>
+      <button class="primary big" id="btnNext" style="display:none">Next question →</button>
+    </div>
+    <div class="fb" id="fb"></div>
+    <div class="help">
+      <b>Group:</b> drag across cells. For wrap-around groups (corners, opposite edges), <i>tap</i> each cell then press <b>Add group</b>.<br>
+      <b>Write:</b> <code>'</code> = NOT, <code>+</code> = OR, letters side by side = AND, e.g. <code>A'B + CD'</code>. POS: <code>(A + B')(C + D)</code>.<br>
+      You get <b>one submission</b> per question.
+    </div>
+  </section>
+  </div>
+</div>
+
+<!-- RESULT -->
+<div class="screen" id="scrEnd">
+  <div class="card start" style="text-align:center">
+    <h2 id="endName"></h2>
+    <div class="big-score" id="endScore"></div>
+    <div class="grade" id="endGrade"></div>
+    <table class="res" id="endTable"></table>
+    <div id="endSave"></div>
+    <div class="row" style="justify-content:center">
+      <button class="primary" id="btnCopy">Copy result code</button>
+      <button id="btnAgain">Practice again</button>
+    </div>
+    <pre id="resText"></pre>
+  </div>
+</div>
+</div>
+
+<script>
+const COLORS=['#e11d48','#2563eb','#16a34a','#d97706','#9333ea','#0891b2','#db2777','#65a30d','#475569'];
+const PEN=['#e11d48','#2563eb','#16a34a','#111827','#d97706'];
+const VARS='ABCD';
+const LEVELS=[
+  {name:'Beginner',desc:'2 variables',qs:[{n:2,min:1,max:1},{n:2,min:1,max:2},{n:2,min:2,max:2}]},
+  {name:'Easy',desc:'3 variables',qs:[{n:3,min:1,max:1},{n:3,min:1,max:2},{n:3,min:2,max:2}]},
+  {name:'Medium',desc:'3 variables, more groups',qs:[{n:3,min:2,max:3,wrap:true},{n:3,min:2,max:3},{n:3,min:3,max:3}]},
+  {name:'Hard',desc:'4 variables',qs:[{n:4,min:1,max:2},{n:4,min:2,max:3},{n:4,min:2,max:3,wrap:true}]},
+  {name:'Expert',desc:'4 var · wrap · POS',qs:[{n:4,min:3,max:4,wrap:true},{n:4,min:3,max:5,wrap:true},{n:4,min:2,max:4,form:'pos',wrap:true}]},
+];
+const QMAX=10, TOTAL=LEVELS.reduce((s,l)=>s+l.qs.length,0)*QMAX;
+let n=4, form='sop', tool='group', vals=[], groups=[], pending=new Set(), marks={bad:new Set(),uncov:new Set()}, answer=null, showAns=false, submitted=false;
+let L, name='', li=0, qi=0, results=[];
+
+const $=id=>document.getElementById(id);
+const gray=b=>b===1?[0,1]:[0,1,3,2];
+function layout(){
+  const rb=n===4?2:1, cb=n===2?1:2, gr=gray(rb), gc=gray(cb), pos={};
+  const mAt=(r,c)=>(gr[r]<<cb)|gc[c];
+  for(let r=0;r<gr.length;r++)for(let c=0;c<gc.length;c++)pos[mAt(r,c)]={r,c};
+  L={rb,cb,rv:VARS.slice(0,rb),cv:VARS.slice(rb,n),gr,gc,rows:gr.length,cols:gc.length,mAt,pos,size:1<<n};
+}
+const bit=(m,i)=>(m>>(n-1-i))&1;
+const pad=(x,b)=>x.toString(2).padStart(b,'0');
+const tv=()=>form==='sop'?1:0;
+
+/* ---------- terms ---------- */
+function cubeOf(cs){const t=[];for(let i=0;i<n;i++){const b=bit(cs[0],i);t.push(cs.every(m=>bit(m,i)===b)?b:-1)}return t}
+const cubeSize=t=>1<<t.filter(x=>x===-1).length;
+const cubeHas=(t,m)=>t.every((b,i)=>b===-1||bit(m,i)===b);
+const cubeCells=t=>{const a=[];for(let m=0;m<L.size;m++)if(cubeHas(t,m))a.push(m);return a};
+const lits=t=>t.filter(x=>x!==-1).length;
+function termStr(t){
+  if(form==='sop'){const s=t.map((b,i)=>b===-1?'':VARS[i]+(b===0?"'":'')).join('');return s||'1'}
+  const s=t.map((b,i)=>b===-1?null:VARS[i]+(b===1?"'":'')).filter(Boolean);
+  return s.length?(s.length>1?'('+s.join(' + ')+')':s[0]):'0';
+}
+function exprStr(ts){
+  if(!ts.length)return form==='sop'?'0':'1';
+  if(form==='sop')return ts.map(termStr).join(' + ');
+  if(ts.length===1)return termStr(ts[0]).replace(/^\((.*)\)$/,'$1');
+  return ts.map(t=>{const s=termStr(t);return s.startsWith('(')?s:'('+s+')'}).join('');
+}
+function wraps(cs){
+  const rs=[...new Set(cs.map(m=>L.pos[m].r))].sort((a,b)=>a-b), cl=[...new Set(cs.map(m=>L.pos[m].c))].sort((a,b)=>a-b);
+  return {row:rs[rs.length-1]-rs[0]+1!==rs.length, col:cl[cl.length-1]-cl[0]+1!==cl.length};
+}
+
+/* ---------- exact minimisation ---------- */
+function minimise(){
+  const T=[];for(let m=0;m<L.size;m++)if(vals[m]===tv())T.push(m);
+  if(!T.length)return{terms:[],lits:0,primes:[]};
+  const imps=[],tot=Math.pow(3,n);
+  for(let k=0;k<tot;k++){let x=k;const t=[];for(let i=0;i<n;i++){t.push([0,1,-1][x%3]);x=Math.floor(x/3)}
+    const cs=cubeCells(t);if(cs.every(m=>vals[m]===tv()))imps.push({t,cs})}
+  const contains=(a,b)=>a.t.every((v,i)=>v===-1||v===b.t[i]);
+  const primes=imps.filter(p=>!imps.some(q=>q!==p&&q.cs.length>p.cs.length&&contains(q,p)));
+  primes.sort((a,b)=>b.cs.length-a.cs.length);
+  let best=null;const sc=ch=>ch.reduce((s,p)=>s+lits(p.t),0);
+  (function dfs(unc,ch){
+    if(best&&ch.length>best.length)return;
+    if(!unc.length){if(!best||ch.length<best.length||sc(ch)<sc(best))best=ch.slice();return}
+    if(best&&ch.length>=best.length)return;
+    const m=unc[0];
+    for(const p of primes)if(p.cs.includes(m)){ch.push(p);dfs(unc.filter(u=>!p.cs.includes(u)),ch);ch.pop()}
+  })(T,[]);
+  return{terms:best.map(p=>p.t),lits:sc(best),primes};
+}
+
+/* ---------- problem generator ---------- */
+function makeProblem(spec){
+  n=spec.n;form=spec.form||'sop';layout();
+  for(let tries=0;tries<4000;tries++){
+    const p=0.3+Math.random()*0.35;
+    vals=[];for(let m=0;m<L.size;m++)vals.push(Math.random()<p?1:0);
+    const ones=vals.filter(v=>v===1).length;
+    if(ones<1||ones>=L.size)continue;
+    const a=minimise();
+    const k=a.terms.length;
+    if(k<spec.min||k>spec.max)continue;
+    if(a.terms.some(t=>lits(t)===0))continue;
+    if(spec.wrap&&!a.terms.some(t=>{const w=wraps(cubeCells(t));return w.row||w.col}))continue;
+    answer=a;return;
+  }
+  answer=minimise();
+}
+
+/* ---------- rendering ---------- */
+function render(){
+  const k=$('kouter');k.innerHTML='';
+  const corner=document.createElement('div');corner.className='corner';corner.innerHTML=`<span class="r">${L.rv}</span><span class="c">${L.cv}</span>`;
+  const colh=document.createElement('div');colh.className='colh';colh.style.gridTemplateColumns=`repeat(${L.cols},1fr)`;
+  L.gc.forEach(g=>{const d=document.createElement('div');d.textContent=pad(g,L.cb);colh.appendChild(d)});
+  const rowh=document.createElement('div');rowh.className='rowh';rowh.style.gridTemplateRows=`repeat(${L.rows},1fr)`;
+  L.gr.forEach(g=>{const d=document.createElement('div');d.textContent=pad(g,L.rb);rowh.appendChild(d)});
+  const cells=document.createElement('div');cells.className='cells';
+  cells.style.gridTemplateColumns=`repeat(${L.cols},1fr)`;cells.style.gridTemplateRows=`repeat(${L.rows},1fr)`;cells.style.aspectRatio=`${L.cols}/${L.rows}`;
+  for(let r=0;r<L.rows;r++)for(let c=0;c<L.cols;c++){
+    const m=L.mAt(r,c),v=vals[m],d=document.createElement('div');
+    d.className='cell v'+v+(pending.has(m)?' pend':'')+(marks.bad.has(m)?' bad':'')+(marks.uncov.has(m)?' uncov':'');
+    d.dataset.m=m;d.innerHTML=`<span class="mn">${m}</span><span class="val">${v}</span>`;cells.appendChild(d);
+  }
+  const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+  svg.setAttribute('class','groups');svg.setAttribute('viewBox',`0 0 ${L.cols*100} ${L.rows*100}`);svg.setAttribute('preserveAspectRatio','none');
+  groups.forEach((g,i)=>drawGroup(svg,g.cells,COLORS[i%COLORS.length],8+(i%5)*6,false,showAns?0.35:1));
+  if(showAns)answer.terms.forEach((t,i)=>drawGroup(svg,cubeCells(t),'#111827',10+(i%5)*6,true,1));
+  cells.appendChild(svg);k.append(corner,colh,rowh,cells);
+  attachCellEvents(cells);renderList();updateBtns();resizeInk();
+}
+function drawGroup(svg,cs,color,d,dashed,op){
+  const set=new Set(cs),inG=(r,c)=>set.has(L.mAt(r,c)),w=wraps(cs),NS='http://www.w3.org/2000/svg';
+  const g=document.createElementNS(NS,'g');g.setAttribute('opacity',op);
+  cs.forEach(m=>{
+    const{r,c}=L.pos[m];
+    const top=r>0?!inG(r-1,c):!w.row, bot=r<L.rows-1?!inG(r+1,c):!w.row, lef=c>0?!inG(r,c-1):!w.col, rig=c<L.cols-1?!inG(r,c+1):!w.col;
+    const x0=c*100+(lef?d:0),x1=c*100+100-(rig?d:0),y0=r*100+(top?d:0),y1=r*100+100-(bot?d:0);
+    const rect=document.createElementNS(NS,'rect');
+    rect.setAttribute('x',x0);rect.setAttribute('y',y0);rect.setAttribute('width',x1-x0);rect.setAttribute('height',y1-y0);
+    rect.setAttribute('fill',color);rect.setAttribute('fill-opacity',dashed?0.06:0.13);g.appendChild(rect);
+    const line=(a,b,c2,e)=>{const l=document.createElementNS(NS,'line');l.setAttribute('x1',a);l.setAttribute('y1',b);l.setAttribute('x2',c2);l.setAttribute('y2',e);
+      l.setAttribute('stroke',color);l.setAttribute('stroke-width',3.5);l.setAttribute('stroke-linecap','round');l.setAttribute('vector-effect','non-scaling-stroke');
+      if(dashed)l.setAttribute('stroke-dasharray','7 5');g.appendChild(l)};
+    if(top)line(x0,y0,x1,y0);if(bot)line(x0,y1,x1,y1);if(lef)line(x0,y0,x0,y1);if(rig)line(x1,y0,x1,y1);
+  });
+  svg.appendChild(g);
+}
+function renderList(){
+  const gl=$('glist');gl.innerHTML='';
+  if(!groups.length){gl.innerHTML='<div class="empty">No groups yet. Draw one on the map.</div>';return}
+  groups.forEach((g,i)=>{
+    const d=document.createElement('div');d.className='gitem';
+    const label=submitted?termStr(g.t):`Group ${i+1}`;
+    d.innerHTML=`<span class="gdot" style="background:${COLORS[i%COLORS.length]}"></span><span class="gterm">${label}</span><span style="font-size:.8rem;color:var(--muted)">cells ${g.cells.slice().sort((a,b)=>a-b).join(', ')}</span>`+(submitted?'':'<button title="Remove">✕</button>');
+    if(!submitted)d.querySelector('button').onclick=()=>{groups.splice(i,1);render()};
+    gl.appendChild(d);
+  });
+}
+function updateBtns(){
+  $('btnAdd').disabled=!pending.size||submitted;$('btnCancel').disabled=!pending.size||submitted;$('btnClearG').disabled=submitted;
+  $('hint').textContent=submitted?'Dashed loops show a correct minimal answer':tool==='pen'?'Draw freely on the map':pending.size?`${pending.size} cell(s) selected. Press Add group`:`Drag to group the ${form==='sop'?'1s':'0s'} · tap cells for wrap-around groups`;
+}
+function renderTrack(){
+  const t=$('track');t.innerHTML='';
+  LEVELS.forEach((lv,i)=>{
+    const d=document.createElement('div');d.className='lv'+(i===li?' cur':'')+(i>li?' lock':'');
+    const dots=lv.qs.map((_,j)=>{const r=results.find(x=>x.li===i&&x.qi===j);if(r)return`<i class="${r.marks===QMAX?'full':r.marks===0?'zero':'part'}"></i>`;return`<i class="${i===li&&j===qi?'now':''}"></i>`}).join('');
+    d.innerHTML=`<div class="t">${i+1}. ${lv.name}</div><div class="s">${lv.desc}</div><div class="dots">${dots}</div>`;t.appendChild(d);
+  });
+  const got=results.reduce((s,r)=>s+r.marks,0);
+  $('score').style.display='';$('score').textContent=`Marks: ${got} / ${TOTAL}`;
+}
+
+/* ---------- interaction ---------- */
+let drag=null;
+function cellAt(x,y){const e=document.elementFromPoint(x,y);const c=e&&e.closest&&e.closest('.cell');return c?+c.dataset.m:null}
+function rectCells(a,b){const p=L.pos[a],q=L.pos[b],o=[];for(let r=Math.min(p.r,q.r);r<=Math.max(p.r,q.r);r++)for(let c=Math.min(p.c,q.c);c<=Math.max(p.c,q.c);c++)o.push(L.mAt(r,c));return o}
+function paintPending(){document.querySelectorAll('.cell').forEach(el=>el.classList.toggle('pend',pending.has(+el.dataset.m)));updateBtns()}
+function attachCellEvents(cells){
+  cells.onpointerdown=e=>{if(tool!=='group'||submitted)return;const m=cellAt(e.clientX,e.clientY);if(m===null)return;
+    e.preventDefault();cells.setPointerCapture(e.pointerId);drag={start:m,cur:m,before:new Set(pending)}};
+  cells.onpointermove=e=>{if(!drag)return;const m=cellAt(e.clientX,e.clientY);if(m===null||m===drag.cur)return;drag.cur=m;pending=new Set(rectCells(drag.start,m));paintPending()};
+  cells.onpointerup=()=>{if(!drag)return;const d=drag;drag=null;
+    if(d.start===d.cur){pending=d.before;pending.has(d.start)?pending.delete(d.start):pending.add(d.start);paintPending()}else addGroup()};
+  cells.onpointercancel=()=>{drag=null};
+}
+function addGroup(){
+  const cs=[...pending];if(!cs.length)return;const want=form==='sop'?'1':'0';
+  if(!cs.every(m=>vals[m]===tv()))return showFb('bad',`A group may only contain <b>${want}</b>s.`);
+  if(cubeSize(cubeOf(cs))!==cs.length){const p=cs.length,pow=(p&(p-1))===0;
+    return showFb('bad',pow?`These ${p} cells are not a valid rectangle (remember the wrap-around edges).`:`A group must have 1, 2, 4, 8 or 16 cells. You selected ${p}.`)}
+  const key=cs.slice().sort((a,b)=>a-b).join();
+  if(groups.some(g=>g.cells.slice().sort((a,b)=>a-b).join()===key))return showFb('info','That group already exists.');
+  groups.push({cells:cs,t:cubeOf(cs)});pending.clear();hideFb();render();
+}
+function showFb(k,h){const f=$('fb');f.className='fb show '+k;f.innerHTML=h}
+function hideFb(){$('fb').className='fb'}
+
+/* ---------- parsing ---------- */
+function parseExpr(str){
+  let s=str.replace(/^\s*F\s*(\([^)]*\))?\s*=/i,'').replace(/\s+/g,'').replace(/[’`′‘]/g,"'").replace(/[·*.&∧⋅]/g,'*').replace(/[|∨]/g,'+');
+  let i=0,lc=0;const peek=()=>s[i];
+  if(!s)throw'No equation written.';
+  const expr=()=>{const a=[term()];while(peek()==='+'){i++;a.push(term())}return a.length===1?a[0]:{op:'or',a}};
+  const term=()=>{const a=[factor()];while(i<s.length){const c=peek();if(c==='*'){i++;a.push(factor());continue}if(/[A-Za-z(~!01]/.test(c)){a.push(factor());continue}break}return a.length===1?a[0]:{op:'and',a}};
+  const factor=()=>{const c=peek();if(c==='~'||c==='!'){i++;return{op:'not',a:factor()}}let p=prim();while(peek()==="'"){i++;p={op:'not',a:p}}return p};
+  const prim=()=>{const c=peek();
+    if(c===undefined)throw'The equation ends too early.';
+    if(c==='('){i++;const e=expr();if(peek()!==')')throw'Missing closing bracket ")".';i++;return e}
+    if(c==='0'||c==='1'){i++;return{op:'k',v:c==='1'}}
+    if(/[A-Za-z]/.test(c)){const v=c.toUpperCase().charCodeAt(0)-65;if(v<0||v>=n)throw`Only ${VARS.slice(0,n).split('').join(', ')} are used here ("${c}" found).`;i++;lc++;return{op:'v',v}}
+    throw`Unexpected symbol "${c}".`};
+  const e=expr();if(i<s.length)throw`Unexpected symbol "${s[i]}".`;return{e,lits:lc};
+}
+function ev(e,m){switch(e.op){case'v':return bit(m,e.v)===1;case'k':return e.v;case'not':return!ev(e.a,m);case'and':return e.a.every(x=>ev(x,m));case'or':return e.a.some(x=>ev(x,m))}}
+
+/* ---------- auto-marking ---------- */
+function submit(){
+  if(submitted)return;
+  if(!groups.length&&!$('inEq').value.trim()){showFb('bad','Draw your groups and write the equation before submitting.');return}
+  pending.clear();
+  const want=form==='sop'?'1':'0', rows=[];
+  const T=[];for(let m=0;m<L.size;m++)if(vals[m]===tv())T.push(m);
+  const covered=new Set(groups.flatMap(g=>g.cells)),unc=T.filter(m=>!covered.has(m));
+  unc.forEach(m=>marks.uncov.add(m));
+  const cov=groups.length&&!unc.length;
+  rows.push([cov?`✓ Every ${want} is covered`:`✗ ${unc.length} ${want}(s) not covered (orange)`,cov?2:0,2]);
+  const pk=new Set(answer.primes.map(p=>p.t.join())),np=groups.filter(g=>!pk.has(g.t.join()));
+  const prime=groups.length&&!np.length;
+  rows.push([prime?'✓ All groups as large as possible':`✗ ${groups.length?np.length+' group(s) could be bigger':'No groups drawn'}`,prime?2:0,2]);
+  const redundant=groups.some((g,i)=>{const o=new Set(groups.filter((_,j)=>j!==i).flatMap(x=>x.cells));return g.cells.every(m=>o.has(m))});
+  const fewest=cov&&prime&&!redundant&&groups.length===answer.terms.length;
+  rows.push([fewest?'✓ No extra groups':`✗ Minimum is ${answer.terms.length} group(s)${groups.length?', you drew '+groups.length:''}`,fewest?1:0,1]);
+  let eqOk=false,eqMin=false,eqMsg='';
+  try{const p=parseExpr($('inEq').value);const wrong=[];
+    for(let m=0;m<L.size;m++)if(ev(p.e,m)!==(vals[m]===1))wrong.push(m);
+    wrong.forEach(m=>marks.bad.add(m));eqOk=!wrong.length;eqMin=eqOk&&p.lits<=answer.lits;
+    eqMsg=eqOk?'✓ Equation is correct':`✗ Equation wrong in ${wrong.length} cell(s) (red)`;
+    if(eqOk&&!eqMin)rows.__lits=`you used ${p.lits} literals, minimum is ${answer.lits}`;
+  }catch(err){eqMsg='✗ '+err}
+  rows.push([eqMsg,eqOk?3:0,3]);
+  rows.push([eqMin?'✓ Equation is minimal':eqOk?`✗ Not minimal (${rows.__lits})`:'✗ Not minimal',eqMin?2:0,2]);
+  const got=rows.reduce((s,r)=>s+r[1],0);
+  results.push({li,qi,marks:got});
+  saveProgress(false);
+  submitted=true;showAns=true;
+  const tbl=rows.map(r=>`<tr><td>${r[0]}</td><td>${r[1]} / ${r[2]}</td></tr>`).join('');
+  showFb(got===QMAX?'good':got>=5?'info':'bad',`<b>${got===QMAX?'Excellent! Full marks.':'Marks for this question'}</b><table class="marks">${tbl}<tr class="tot"><td><b>Total</b></td><td>${got} / ${QMAX}</td></tr></table><div style="margin-top:8px">Answer: F = <code>${exprStr(answer.terms)}</code></div>`);
+  $('inEq').disabled=true;$('btnSubmit').style.display='none';$('btnNext').style.display='';
+  const last=li===LEVELS.length-1&&qi===LEVELS[li].qs.length-1;
+  $('btnNext').textContent=last?'See my result →':qi===LEVELS[li].qs.length-1?`Next level: ${LEVELS[li+1].name} →`:'Next question →';
+  render();renderTrack();
+}
+
+/* ---------- flow ---------- */
+function loadQuestion(){
+  const spec=LEVELS[li].qs[qi];
+  makeProblem(spec);
+  groups=[];pending.clear();marks.bad.clear();marks.uncov.clear();showAns=false;submitted=false;strokes=[];
+  $('inEq').value='';$('inEq').disabled=false;$('inEq').placeholder=form==='sop'?"e.g. A'B + C":"e.g. (A + B')(C + D)";
+  $('btnSubmit').style.display='';$('btnNext').style.display='none';hideFb();
+  $('qtitle').textContent=`Level ${li+1}: ${LEVELS[li].name} · Question ${qi+1} of ${LEVELS[li].qs.length}`+(form==='pos'?' · POS':'');
+  const vs=VARS.slice(0,n).split('').join(',');
+  const ms=[],zs=[];for(let m=0;m<L.size;m++)(vals[m]?ms:zs).push(m);
+  $('qsub').innerHTML=form==='sop'?`F(${vs}) = Σm(${ms.join(',')})<br><span style="font-family:system-ui;color:var(--muted)">Group the 1s and write the minimal <b>SOP</b>.</span>`
+                                  :`F(${vs}) = ΠM(${zs.join(',')})<br><span style="font-family:system-ui;color:var(--muted)">Group the <b>0s</b> and write the minimal <b>POS</b>.</span>`;
+  render();renderTrack();window.scrollTo({top:0,behavior:'smooth'});
+}
+function next(){
+  if(qi<LEVELS[li].qs.length-1)qi++;else if(li<LEVELS.length-1){li++;qi=0}else return finish();
+  loadQuestion();
+}
+function show(id){document.querySelectorAll('.screen').forEach(s=>s.classList.toggle('on',s.id===id))}
+function gradeOf(p){return p>=90?'A+':p>=80?'A':p>=70?'B':p>=60?'C':p>=50?'D':'F'}
+function finish(){
+  const got=results.reduce((s,r)=>s+r.marks,0),pct=Math.round(got/TOTAL*100);
+  $('endName').textContent=name;$('endScore').textContent=`${got} / ${TOTAL}`;$('endGrade').textContent=`${pct}% · Grade ${gradeOf(pct)}`;
+  const lines=LEVELS.map((lv,i)=>{const s=results.filter(r=>r.li===i).reduce((a,r)=>a+r.marks,0);return[`${i+1}. ${lv.name}`,`${s} / ${lv.qs.length*QMAX}`]});
+  $('endTable').innerHTML=lines.map(l=>`<tr><td style="text-align:left">${l[0]}</td><td>${l[1]}</td></tr>`).join('');
+  $('resText').textContent=`K-Map Quiz: ${name}\nTotal: ${got}/${TOTAL} (${pct}%, Grade ${gradeOf(pct)})\n`+lines.map(l=>`${l[0]}: ${l[1]}`).join('\n');
+  $('score').textContent=`Marks: ${got} / ${TOTAL}`;
+  const code=makeCode();
+  $('resText').textContent=code;
+  if(practice){$('endSave').innerHTML=`<div class="note info">This was a practice round, so these marks were <b>not</b> sent to the marks sheet. Your first attempt is the one that counts.</div>`}
+  else{
+    $('endSave').innerHTML=`<div class="note info">Saving your marks…</div>`;
+    saveProgress(true).then(ok=>{
+      $('endSave').innerHTML=ok?`<div class="note ok">✓ Your marks are saved to your teacher's marks sheet.</div>`
+        :`<div class="note no">Your marks could not be saved automatically. Press <b>Copy result code</b> and send it to your teacher.<div class="codebox">${code}</div></div>`;
+    });
+  }
+  show('scrEnd');
+}
+
+/* ---------- saving to Google Sheet ---------- */
+// After deploying apps-script/Code.gs as a Web App, paste its URL here:
+const SHEET_URL='PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE';
+let practice=false,saved=null,sid=null,startedAt=null,saveChain=Promise.resolve(),practiceNext=false;
+const NQ=LEVELS.reduce((s,l)=>s+l.qs.length,0);
+const flat=(a,b)=>LEVELS.slice(0,a).reduce((s,l)=>s+l.qs.length,0)+b;
+const unflat=k=>{let a=0;while(k>=LEVELS[a].qs.length){k-=LEVELS[a].qs.length;a++}return[a,k]};
+function qArray(){const q=Array(NQ).fill(-1);results.forEach(r=>q[flat(r.li,r.qi)]=r.marks);return q}
+const LSKEY='kmap-quiz-progress';
+function lsGet(){try{return JSON.parse(localStorage.getItem(LSKEY)||'null')}catch(e){return null}}
+function lsSet(o){try{localStorage.setItem(LSKEY,JSON.stringify(o))}catch(e){}}
+const sheetReady=()=>/^https:\/\/script\.google\.com\//.test(SHEET_URL);
+function setPill(state){const p=$('saveState');p.style.display='';
+  if(practice){p.className='pill';p.textContent='Practice (not saved)';return}
+  if(state==='ok'){p.className='pill ok';p.textContent='✓ Marks saved'}
+  else if(state==='no'){p.className='pill no';p.textContent='Not saved: result code at end'}
+  else{p.className='pill';p.textContent='Saving…'}}
+function hash(s){let h=5381;for(let i=0;i<s.length;i++)h=((h<<5)+h+s.charCodeAt(i))>>>0;return h.toString(36)}
+async function postSheet(payload){
+  if(!sheetReady())return false;
+  const p=JSON.stringify(payload);
+  for(let attempt=0;attempt<2;attempt++){
+    try{const r=await fetch(SHEET_URL,{method:'POST',body:JSON.stringify({p,s:hash('eed-kmap|'+p)})});
+      const j=await r.json();if(j&&j.ok)return true;if(j&&j.error)return false}catch(e){}
+    await new Promise(r=>setTimeout(r,1000+Math.random()*1000));
+  }
+  return false;
+}
+function saveProgress(finished){
+  if(practice)return Promise.resolve(false);
+  const q=qArray();
+  lsSet({sid,name,q,finished:!!finished,startedAt});
+  saved={sid,name,q,finished:!!finished,startedAt};
+  setPill('saving');
+  saveChain=saveChain.then(async()=>{const ok=await postSheet({sid,name,q,finished:!!finished,src:'live',started:startedAt,t:Date.now()});setPill(ok?'ok':'no');return ok});
+  return saveChain;
+}
+function makeCode(){
+  const p=JSON.stringify({sid,n:name,q:qArray(),t:Date.now()});
+  const b=btoa(unescape(encodeURIComponent(p))).replace(/=+$/,'');
+  return `KM1.${b}.${hash('eed-kmap|'+b)}`;
+}
+function readCode(c){
+  const m=c.trim().match(/^KM1\.([A-Za-z0-9+/]+)\.([a-z0-9]+)$/);if(!m)return null;
+  if(hash('eed-kmap|'+m[1])!==m[2])return null;
+  try{const o=JSON.parse(decodeURIComponent(escape(atob(m[1]))));if(!Array.isArray(o.q)||o.q.length!==NQ)return null;return{o,sig:m[2]}}catch(e){return null}
+}
+function initLocal(){
+  saved=lsGet();
+  if(saved&&(!Array.isArray(saved.q)||saved.q.length!==NQ))saved=null;
+  sid=saved?.sid||('s'+Date.now().toString(36)+Math.random().toString(36).slice(2,8));
+  startedAt=saved?.startedAt||null;
+  if(location.hash==='#teacher')openTeacher();else showResume();
+}
+function showResume(){
+  const b=$('resumeBox');$('btnStart').style.display='';
+  if(!saved){b.innerHTML='';return}
+  const total=saved.q.reduce((s,x)=>s+Math.max(0,x),0), k=saved.q.filter(x=>x>=0).length;
+  if(saved.finished||k>=NQ){
+    b.innerHTML=`<div class="note ok">You have already finished: <b>${total} / ${TOTAL}</b>. Starting again is <b>practice only</b> and won't change your marks.</div>`;
+    $('btnStart').textContent='Practice';
+  }else{
+    const [a,bq]=unflat(k);
+    $('btnStart').style.display='none';
+    if(saved.name)$('inName').value=saved.name;
+    b.innerHTML=`<div class="note info">You have a quiz in progress (${total} marks so far). <button class="primary" id="btnResume" style="margin-left:6px">Continue from Level ${a+1}, Q${bq+1}</button></div>`;
+    $('btnResume').onclick=()=>{
+      name=saved.name||'Student';$('who').textContent=name;practice=false;
+      results=[];saved.q.forEach((m,i)=>{if(m>=0){const[x,y]=unflat(i);results.push({li:x,qi:y,marks:m})}});
+      [li,qi]=unflat(k);show('scrQuiz');setPill('ok');loadQuestion();
+    };
+  }
+}
+function openTeacher(){
+  show('scrTeacher');
+  $('teacherNote').innerHTML=sheetReady()?'Codes you add here are sent to your Google Sheet.':'<b>Setup not finished:</b> paste your Apps Script Web App URL into <code>SHEET_URL</code> in index.html first.';
+}
+async function importCodes(){
+  const lines=$('inCodes').value.split(/\s+/).filter(Boolean);let ok=0,bad=0;
+  $('impMsg').textContent='Sending…';
+  for(const c of lines){const r=readCode(c);if(!r){bad++;continue}
+    const q=r.o.q.map(x=>typeof x==='number'?Math.max(-1,Math.min(QMAX,x)):-1);
+    const done=await postSheet({sid:r.o.sid||('code-'+r.sig),name:String(r.o.n||'').slice(0,80),q,finished:q.every(x=>x>=0),src:'code',t:r.o.t||Date.now()});
+    done?ok++:bad++}
+  $('impMsg').textContent=`${ok} added to the sheet${bad?`, ${bad} invalid or failed`:''}.`;if(ok)$('inCodes').value='';
+}
+
+/* ---------- pen ---------- */
+const ink=$('ink'),ctx=ink.getContext('2d');let strokes=[],cur=null,penColor=PEN[0];
+function resizeInk(){const r=$('mapWrap').getBoundingClientRect(),dpr=window.devicePixelRatio||1;ink.width=r.width*dpr;ink.height=r.height*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);redraw()}
+function redraw(){const dpr=window.devicePixelRatio||1,w=ink.width/dpr,h=ink.height/dpr;ctx.clearRect(0,0,w,h);ctx.lineCap='round';ctx.lineJoin='round';
+  for(const s of strokes){ctx.strokeStyle=s.c;ctx.lineWidth=4;ctx.beginPath();s.p.forEach(([x,y],i)=>i?ctx.lineTo(x*w,y*h):ctx.moveTo(x*w,y*h));ctx.stroke()}}
+function pt(e){const r=ink.getBoundingClientRect();return[(e.clientX-r.left)/r.width,(e.clientY-r.top)/r.height]}
+ink.onpointerdown=e=>{if(tool!=='pen')return;e.preventDefault();ink.setPointerCapture(e.pointerId);cur={c:penColor,p:[pt(e)]};strokes.push(cur);redraw()};
+ink.onpointermove=e=>{if(!cur)return;cur.p.push(pt(e));redraw()};
+ink.onpointerup=ink.onpointercancel=()=>{cur=null};
+function buildPen(){const p=$('penPanel');p.innerHTML='<span class="lbl">Colour</span>';
+  PEN.forEach(c=>{const b=document.createElement('button');b.className='swatch'+(c===penColor?' on':'');b.style.background=c;b.onclick=()=>{penColor=c;buildPen()};p.appendChild(b)});
+  const u=document.createElement('button');u.textContent='Undo stroke';u.onclick=()=>{strokes.pop();redraw()};p.appendChild(u)}
+window.addEventListener('resize',()=>{if($('scrQuiz').classList.contains('on'))resizeInk()});
+
+/* ---------- wiring ---------- */
+$('segT').querySelectorAll('button').forEach(b=>b.onclick=()=>{$('segT').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));tool=b.dataset.t;document.body.className=tool;pending.clear();render()});
+$('btnStart').onclick=()=>{
+  const nm=$('inName').value.trim();if(!nm){$('inName').focus();$('inName').placeholder='Please enter your name / roll number';return}
+  name=nm;$('who').textContent=name;li=0;qi=0;results=[];
+  practice=!!(saved&&saved.finished)||practiceNext;
+  if(!practice){startedAt=new Date().toISOString()}
+  show('scrQuiz');setPill('');
+  if(!practice)$('saveState').textContent=sheetReady()?'Marks save after each answer':'Not saved: result code at end';
+  loadQuestion()};
+window.addEventListener('hashchange',()=>{if(location.hash==='#teacher')openTeacher()});
+$('btnImport').onclick=importCodes;
+$('inName').onkeydown=e=>{if(e.key==='Enter')$('btnStart').click()};
+$('btnAdd').onclick=addGroup;
+$('btnCancel').onclick=()=>{pending.clear();paintPending()};
+$('btnClearG').onclick=()=>{groups=[];pending.clear();hideFb();render()};
+$('btnClearInk').onclick=()=>{strokes=[];redraw()};
+$('btnSubmit').onclick=submit;
+$('btnNext').onclick=next;
+$('inEq').onkeydown=e=>{if(e.key==='Enter')submit()};
+$('btnAgain').onclick=()=>{practiceNext=true;show('scrStart');$('score').style.display='none';$('saveState').style.display='none';
+  $('resumeBox').innerHTML='<div class="note info">Practice round: marks won\'t be sent again. Your first attempt is the one that counts.</div>';$('btnStart').textContent='Practice'};
+$('btnCopy').onclick=async()=>{const t=$('resText');t.style.display='block';
+  try{await navigator.clipboard.writeText(t.textContent);$('btnCopy').textContent='Copied ✓ Send it to your teacher'}catch(e){$('btnCopy').textContent='Select the code below to copy'}};
+document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.activeElement.tagName!=='INPUT'&&pending.size)addGroup()});
+buildPen();initLocal();
+</script>
+</body>
+</html>
