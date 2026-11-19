@@ -493,7 +493,7 @@ function finish(){
 
 /* ---------- saving to Google Sheet ---------- */
 // After deploying apps-script/Code.gs as a Web App, paste its URL here:
-const SHEET_URL='PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE';
+const SHEET_URL='https://script.google.com/macros/s/AKfycbzIVMV5iqljileZvsFzuovzBB270D2d5y4tl-yib08Zz8fMfm5fwA8xb3-LGUmAkGVKbQ/exec';
 let practice=false,saved=null,sid=null,startedAt=null,saveChain=Promise.resolve(),practiceNext=false;
 const NQ=LEVELS.reduce((s,l)=>s+l.qs.length,0);
 const flat=(a,b)=>LEVELS.slice(0,a).reduce((s,l)=>s+l.qs.length,0)+b;
