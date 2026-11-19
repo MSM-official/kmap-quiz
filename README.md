@@ -8,7 +8,16 @@ All marks go into one Google Sheet.
 - Marking per question: covers every 1 (2) · groups as large as possible (2) · no extra groups (1) · equation correct (3) · equation minimal (2)
 - Random maps for every student, one submission per question, progress kept if the page is reloaded
 
-## Setup (one time)
+## Option A: host everything in Google Apps Script (no GitHub needed)
+Files: `apps-script/Code.gs` and `apps-script/index.html`.
+1. In your Apps Script project, replace **Code.gs** with `apps-script/Code.gs`.
+2. **+ (Add a file) → HTML**, name it `index`, and paste `apps-script/index.html`.
+3. **Deploy → Manage deployments → ✏️ Edit → Version: New version → Deploy.**
+4. Students open your `/exec` link. Teacher code page: `/exec?teacher=yes`. Sheet link: `/exec?status=yes`.
+
+## Option B: GitHub Pages + Google Sheet
+
+### Setup (one time)
 
 ### 1. Google Sheet for marks
 1. Create a new Google Sheet (e.g. "K-Map Marks").

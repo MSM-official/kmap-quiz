@@ -1,8 +1,12 @@
 /**
- * K-Map Quiz: marks collector for Google Sheets.
- * Paste this into Extensions → Apps Script of your Google Sheet,
- * then Deploy → New deployment → Web app (Execute as: Me, Who has access: Anyone).
- * Each student gets ONE row that updates after every question.
+ * K-Map Quiz: everything in Google Apps Script.
+ * Files in this project:  Code.gs (this file)  +  index (HTML file named "index").
+ * Deploy → Manage deployments → Edit → Version: New version → Deploy.
+ *   Students:  your /exec link
+ *   Teacher (paste result codes):  your /exec link + ?teacher=yes
+ *   Sheet link check:  your /exec link + ?status=yes
+ * Marks go to the Sheet this script is attached to, or (standalone script)
+ * to a sheet named "K-Map Quiz Marks" that it creates in your Drive.
  */
 const SHEET_NAME = 'Marks';
 const LEVELS = ['Beginner', 'Easy', 'Medium', 'Hard', 'Expert'];
@@ -57,28 +61,42 @@ function json_(o) {
   return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);
 }
 
-function doGet() {
-  try {
-    sheet_();
-    return json_({ ok: true, msg: 'K-Map marks endpoint is running.', sheet: ss_().getUrl() });
-  } catch (err) {
-    return json_({ ok: false, error: String(err) });
+function doGet(e) {
+  const p = (e && e.parameter) || {};
+  if (p.status) {
+    try { sheet_(); return json_({ ok: true, msg: 'K-Map quiz is running.', sheet: ss_().getUrl() }); }
+    catch (err) { return json_({ ok: false, error: String(err) }); }
   }
+  const t = HtmlService.createTemplateFromFile('index');
+  t.teacher = p.teacher === 'yes' ? 'yes' : 'no';
+  return t.evaluate()
+    .setTitle('K-Map Quiz')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+// Called from the quiz page with google.script.run
+function submitMarks(body) {
+  return handle_(body);
 }
 
 function doPost(e) {
+  try { return json_(handle_(JSON.parse(e.postData.contents))); }
+  catch (err) { return json_({ ok: false, error: String(err) }); }
+}
+
+function handle_(body) {
   const lock = LockService.getScriptLock();
   try {
     lock.waitLock(15000);
-    const body = JSON.parse(e.postData.contents);
-    if (typeof body.p !== 'string' || hash_('eed-kmap|' + body.p) !== body.s) return json_({ ok: false, error: 'bad signature' });
+    if (typeof body.p !== 'string' || hash_('eed-kmap|' + body.p) !== body.s) return ({ ok: false, error: 'bad signature' });
     const d = JSON.parse(body.p);
-    if (!Array.isArray(d.q) || d.q.length !== NQ) return json_({ ok: false, error: 'bad data' });
+    if (!Array.isArray(d.q) || d.q.length !== NQ) return ({ ok: false, error: 'bad data' });
 
     const q = d.q.map(x => (typeof x === 'number' ? Math.max(-1, Math.min(QMAX, Math.round(x))) : -1));
     const sid = String(d.sid || '').slice(0, 60);
     const name = String(d.name || '').replace(/^[=+\-@]/, "'$&").slice(0, 80);
-    if (!sid) return json_({ ok: false, error: 'no id' });
+    if (!sid) return ({ ok: false, error: 'no id' });
 
     const levelMarks = LEVELS.map((_, i) => q.slice(i * Q_PER_LEVEL, (i + 1) * Q_PER_LEVEL).reduce((s, x) => s + Math.max(0, x), 0));
     const total = levelMarks.reduce((a, b) => a + b, 0);
@@ -101,7 +119,7 @@ function doPost(e) {
     let started = d.started || new Date();
     if (row > 0) {
       const prev = sh.getRange(row, 1, 1, HEADER.length).getValues()[0];
-      if (prev[HEADER.indexOf('Status')] === 'Finished' && d.src !== 'code') return json_({ ok: true, note: 'already finished' });
+      if (prev[HEADER.indexOf('Status')] === 'Finished' && d.src !== 'code') return ({ ok: true, note: 'already finished' });
       started = prev[HEADER.indexOf('Started')] || started;
     }
     const values = [sid, name].concat(levelMarks).concat([
@@ -111,9 +129,9 @@ function doPost(e) {
 
     if (row > 0) sh.getRange(row, 1, 1, values.length).setValues([values]);
     else sh.appendRow(values);
-    return json_({ ok: true });
+    return ({ ok: true });
   } catch (err) {
-    return json_({ ok: false, error: String(err) });
+    return ({ ok: false, error: String(err) });
   } finally {
     try { lock.releaseLock(); } catch (e) {}
   }
